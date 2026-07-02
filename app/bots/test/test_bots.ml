@@ -107,3 +107,55 @@ let%expect_test "make_recording_bot wires up a runnable bot" =
   [%expect {| |}];
   return ()
 ;;
+
+let bbo_event : Exchange_event.t =
+  Best_bid_offer_update
+    { symbol = aapl
+    ; bbo =
+        { bid =
+            Some { price = Price.of_int_cents 14990; size = Size.of_int 100 }
+        ; ask =
+            Some { price = Price.of_int_cents 15010; size = Size.of_int 200 }
+        }
+    }
+;;
+
+(* The slow consumer drains [events_per_read] events immediately, then stalls
+   for [read_delay] on the next one -- that stall is what backs up the
+   exchange-side pipe. We assert the cadence without real sleeping: [read_delay]
+   is large, so a stalled handler is simply a not-yet-determined deferred
+   ([Deferred.peek = None]), and we read the [events_seen] counter (a ref we
+   own) to confirm the increment and reset. *)
+let%expect_test "slow consumer stalls every [events_per_read] events" =
+  let events_seen = ref 0 in
+  let config : Slow_consumer_bot.Config.t =
+    { read_delay = Time_ns.Span.of_sec 60.; events_per_read = 3; events_seen }
+  in
+  let bot, _submitted, _cancelled =
+    make_recording_bot (module Slow_consumer_bot) config ()
+  in
+  let feed_and_report label =
+    let d = Bot_runtime.feed_event bot bbo_event in
+    printf
+      "%s: events_seen=%d stalled=%b\n"
+      label
+      !events_seen
+      (Option.is_none (Deferred.peek d))
+  in
+  feed_and_report "event 1";
+  feed_and_report "event 2";
+  feed_and_report "event 3";
+  feed_and_report "event 4";
+  feed_and_report "event 5";
+  feed_and_report "event 6";
+  [%expect
+    {|
+    event 1: events_seen=1 stalled=false
+    event 2: events_seen=2 stalled=false
+    event 3: events_seen=0 stalled=true
+    event 4: events_seen=1 stalled=false
+    event 5: events_seen=2 stalled=false
+    event 6: events_seen=0 stalled=true
+    |}];
+  return ()
+;;
