@@ -1,10 +1,9 @@
 (** Pathological load scenario driving {!Jsip_bots.Cancel_storm}.
 
-    One quiet symbol, no news, no other traffic: every RPC the exchange
-    sees comes from the storm, so anything that degrades (latency, memory,
-    feed backlog) is attributable to it. The interesting knobs are the
-    storm's intensity and shape — see [storm_bot] and the lineup in
-    [configure]. *)
+    One quiet symbol, no news, no other traffic: every RPC the exchange sees
+    comes from the storm, so anything that degrades (latency, memory, feed
+    backlog) is attributable to it. The interesting knobs are the storm's
+    intensity and shape — see [storm_bot] and the lineup in [configure]. *)
 
 open! Core
 open Jsip_types
@@ -18,9 +17,9 @@ let description =
 
 let symbol = Symbol.of_string "STRM"
 
-(* Near-flat fundamental: the storm prices off the oracle, and a calm
-   oracle keeps its passive orders from drifting into the spread and
-   filling before they can be cancelled. *)
+(* Near-flat fundamental: the storm prices off the oracle, and a calm oracle
+   keeps its passive orders from drifting into the spread and filling before
+   they can be cancelled. *)
 let oracle_config : Jsip_fundamental.Fundamental_oracle.Config.t =
   Symbol.Map.of_alist_exn
     [ ( symbol
@@ -33,11 +32,10 @@ let oracle_config : Jsip_fundamental.Fundamental_oracle.Config.t =
     ]
 ;;
 
-(* One storm instance. [side] also names the participant, so a Buy and a
-   Sell instance get distinct identities (and therefore distinct
-   client-order-id spaces and session feeds). Each call allocates a fresh
-   [next_id] ref — see [Cancel_storm.Config.next_id] for why instances
-   must not share one. *)
+(* One storm instance. [side] also names the participant, so a Buy and a Sell
+   instance get distinct identities (and therefore distinct client-order-id
+   spaces and session feeds). Each call allocates a fresh [next_id] ref — see
+   [Cancel_storm.Config.next_id] for why instances must not share one. *)
 let storm_bot ~(side : Side.t) ~rng_seed ~pairs_per_tick ~tick_interval
   : Bot_spec.t
   =
@@ -69,13 +67,16 @@ let configure () : Scenario_config.t =
   ; oracle_config
   ; news = []
   ; bots =
-      (* TODO(human): choose the storm lineup. Build a list of one or more
-         [storm_bot ~side ~rng_seed ~pairs_per_tick ~tick_interval] calls.
-         The effective RPC rate per instance is
-         [2 * pairs_per_tick / tick_interval] (a submit and a cancel per
-         pair), so the same load can be shaped as few large bursts or many
-         small ones — and one-sided vs. two-sided storms stress the book
-         differently. *)
-      failwith "TODO(human): choose the cancel-storm lineup"
+      [ storm_bot
+          ~side:Side.Buy
+          ~rng_seed:3
+          ~pairs_per_tick:40
+          ~tick_interval:(Time_ns.Span.of_ms 50.)
+      ; storm_bot
+          ~side:Side.Sell
+          ~rng_seed:4
+          ~pairs_per_tick:40
+          ~tick_interval:(Time_ns.Span.of_ms 50.)
+      ]
   }
 ;;

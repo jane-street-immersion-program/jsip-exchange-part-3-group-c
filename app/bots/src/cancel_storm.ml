@@ -1,9 +1,10 @@
-(** A pathological bot: submits an order, immediately cancels it, and
-    repeats forever.
+(** A pathological bot: submits an order, immediately cancels it, and repeats
+    forever.
 
     This bot is deliberately adversarial. It targets three things at once:
 
-    - The cancel path itself ([cancel_order_rpc] / {!Matching_engine.cancel}).
+    - The cancel path itself ([cancel_order_rpc] /
+      {!Matching_engine.cancel}).
     - The submit/accept/cancel event flow on the bot's own session-feed pipe
       — every pair produces (at least) an [Order_accept] and an
       [Order_cancel], back to back.
@@ -34,14 +35,15 @@ module Config = struct
     { symbol : Symbol.t
     ; size : Size.t
     ; side : Side.t
-    (** Side to submit on. Launch two instances (one [Buy], one [Sell]) for
-        a storm that hits both sides of the book. *)
+    (** Side to submit on. Launch two instances (one [Buy], one [Sell]) for a
+        storm that hits both sides of the book. *)
     ; offset_from_fundamental_cents : int
     (** Distance from the fundamental price, on the passive side, so orders
         rest instead of crossing the spread and filling before they can be
         cancelled. A [Buy] prices at [fundamental - offset]; a [Sell] prices
         at [fundamental + offset]. *)
-    ; pairs_per_tick : int (** How many submit/cancel pairs to fire per tick. *)
+    ; pairs_per_tick : int
+    (** How many submit/cancel pairs to fire per tick. *)
     ; next_id : int ref
     (** Monotonically increasing counter for this instance's client order
         ids. Never reused — see the module doc for why that matters. Each
@@ -83,7 +85,9 @@ let submit_and_cancel_one (config : Config.t) (ctx : Bot_runtime.Context.t) =
    | Ok () -> ()
    | Error error ->
      [%log.error
-       "cancel_storm: submit failed" (request : Order.Request.t) (error : Error.t)]);
+       "cancel_storm: submit failed"
+         (request : Order.Request.t)
+         (error : Error.t)]);
   let%bind cancel_result = Bot_runtime.Context.cancel ctx client_order_id in
   (match cancel_result with
    | Ok () -> ()
@@ -95,7 +99,9 @@ let submit_and_cancel_one (config : Config.t) (ctx : Bot_runtime.Context.t) =
   return ()
 ;;
 
-let on_tick (config : Config.t) (ctx : Bot_runtime.Context.t) : unit Deferred.t =
+let on_tick (config : Config.t) (ctx : Bot_runtime.Context.t)
+  : unit Deferred.t
+  =
   Deferred.List.iter
     ~how:`Parallel
     (List.init config.pairs_per_tick ~f:Fn.id)
@@ -126,6 +132,7 @@ let on_event
          (client_order_id : Client_order_id.t)
          (reason : string)]
    | Order_accept _ | Order_cancel _ | Fill _ | Best_bid_offer_update _
-   | Trade_report _ -> ());
+   | Trade_report _ ->
+     ());
   return ()
 ;;
