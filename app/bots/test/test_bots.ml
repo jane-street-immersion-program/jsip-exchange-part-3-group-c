@@ -107,3 +107,148 @@ let%expect_test "make_recording_bot wires up a runnable bot" =
   [%expect {| |}];
   return ()
 ;;
+
+(* ------------------------------------------------------------------------ *)
+(* Tests for [Resource_canary_bot].
+
+   The canary reads nothing from its [Context.t] — it drives latency probes
+   through the [book_query] closure in its config. So we call [on_start] /
+   [on_tick] directly with a throwaway context and a mock [book_query], then
+   inspect the mutable [latency_data] table.
+
+   - [request_interval] (probe every N ticks) is asserted via SAMPLE COUNTS,
+     which are deterministic even though the recorded wall-clock latencies
+     are not.
+   - [report_interval] (print every M ticks) is asserted by PRE-SEEDING
+     [latency_data] with known floats and freezing new probes (huge
+     [request_interval]), so the printed report is fully deterministic. *)
+
+module Rc = Resource_canary_bot
+
+let msft = Symbol.of_string "MSFT"
+
+(* The canary ignores the context, so any runnable bot's context will do. *)
+let make_context () =
+  let bot, _submitted, _cancelled =
+    make_recording_bot (module Inert_bot) () ()
+  in
+  Bot_runtime.For_testing.context_of bot
+;;
+
+(* Build a config, start the bot, optionally seed [latency_data] (after
+   [on_start], which clears it), then drive [ticks] ticks. Returns the config
+   so callers can inspect the resulting state. *)
+let run
+  ~symbols
+  ~request_interval
+  ~report_interval
+  ?(book_query = fun (_ : Symbol.t) -> return None)
+  ?(seed = [])
+  ~ticks
+  ()
+  : Rc.RCConfig.t Deferred.t
+  =
+  let ctx = make_context () in
+  let config : Rc.RCConfig.t =
+    { participant = alice
+    ; request_interval
+    ; report_interval
+    ; symbols
+    ; book_query
+    ; latency_data = Symbol.Table.create ()
+    ; ticks_since_start = 0
+    }
+  in
+  let%bind () = Rc.on_start config ctx in
+  List.iter seed ~f:(fun (symbol, data) ->
+    Hashtbl.set config.latency_data ~key:symbol ~data);
+  let%bind () =
+    Deferred.List.iter
+      (List.init ticks ~f:Fn.id)
+      ~how:`Sequential
+      ~f:(fun (_ : int) -> Rc.on_tick config ctx)
+  in
+  return config
+;;
+
+(* TODO(human): implement [print_sample_counts].
+
+   Given a config, print one line per tracked symbol showing how many latency
+   samples have been recorded for it, e.g.:
+
+   AAPL: 3 samples MSFT: 3 samples
+
+   The count is [List.length] of the symbol's entry in [config.latency_data]
+   (look it up with [Hashtbl.find]; treat an absent symbol as 0). Iterate
+   over [config.symbols].
+
+   Design decision to make: [Symbol.Table] is a hashtable, so its iteration
+   order is unspecified and unstable — bad for an expect test. Decide how to
+   guarantee a deterministic line order for the output. *)
+let print_sample_counts (config : Rc.RCConfig.t) : unit =
+  List.iter config.symbols ~f:(fun symbol ->
+    let data_length =
+      Hashtbl.find_exn config.latency_data symbol |> List.length
+    in
+    print_endline [%string "%{symbol#Symbol}: %{data_length#Int} samples"])
+;;
+
+let%expect_test "requests are recorded every request_interval ticks, per \
+                 symbol"
+  =
+  (* [report_interval] exceeds the tick count so no report fires; the only
+     observable effect is the recorded sample counts. *)
+  let show ~request_interval ~ticks =
+    let%bind config =
+      run
+        ~symbols:[ aapl; msft ]
+        ~request_interval
+        ~report_interval:1_000_000
+        ~ticks
+        ()
+    in
+    printf "request_interval=%d, ticks=%d:\n" request_interval ticks;
+    print_sample_counts config;
+    return ()
+  in
+  let%bind () = show ~request_interval:1 ~ticks:6 in
+  let%bind () = show ~request_interval:2 ~ticks:6 in
+  let%bind () = show ~request_interval:3 ~ticks:7 in
+  [%expect {|
+    request_interval=1, ticks=6:
+    AAPL: 6 samples
+    MSFT: 6 samples
+    request_interval=2, ticks=6:
+    AAPL: 3 samples
+    MSFT: 3 samples
+    request_interval=3, ticks=7:
+    AAPL: 2 samples
+    MSFT: 2 samples
+    |}];
+  return ()
+;;
+
+let%expect_test "report prints seeded latency stats once per report_interval"
+  =
+  (* Freeze new probes (huge [request_interval]) so the report reflects
+     exactly the seeded data. most_recent = 10, avg = (10+20+30+40)/4 = 25,
+     last_3 = (10+20+30)/3 = 20. 7 ticks / report_interval 3 => two reports. *)
+  let%bind (_ : Rc.RCConfig.t) =
+    run
+      ~symbols:[ aapl ]
+      ~request_interval:1_000_000
+      ~report_interval:3
+      ~seed:[ aapl, [ 10.0; 20.0; 30.0; 40.0 ] ]
+      ~ticks:7
+      ()
+  in
+  [%expect
+    {|
+    RESOURCE CANARY REPORT
+    (AAPL) most_recent_latency_ms: 10.ms avg_latency_ms: 25.ms last_3_avg_latency_ms: 20.ms
+
+    RESOURCE CANARY REPORT
+    (AAPL) most_recent_latency_ms: 10.ms avg_latency_ms: 25.ms last_3_avg_latency_ms: 20.ms
+    |}];
+  return ()
+;;
