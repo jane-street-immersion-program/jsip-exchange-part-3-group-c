@@ -171,20 +171,7 @@ let run
   return config
 ;;
 
-(* TODO(human): implement [print_sample_counts].
 
-   Given a config, print one line per tracked symbol showing how many latency
-   samples have been recorded for it, e.g.:
-
-   AAPL: 3 samples MSFT: 3 samples
-
-   The count is [List.length] of the symbol's entry in [config.latency_data]
-   (look it up with [Hashtbl.find]; treat an absent symbol as 0). Iterate
-   over [config.symbols].
-
-   Design decision to make: [Symbol.Table] is a hashtable, so its iteration
-   order is unspecified and unstable — bad for an expect test. Decide how to
-   guarantee a deterministic line order for the output. *)
 let print_sample_counts (config : Rc.RCConfig.t) : unit =
   List.iter config.symbols ~f:(fun symbol ->
     let data_length =
