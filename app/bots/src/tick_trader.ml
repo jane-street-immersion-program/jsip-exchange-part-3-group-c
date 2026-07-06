@@ -14,21 +14,21 @@ module Config = struct
 end
 
 let name = "tick_trader"
-
-(* Nothing to set up, and nothing to react to -- this bot only acts on its own
-   clock, in [on_tick]. *)
 let on_start (_config : Config.t) (_context : Context.t) = return ()
 
-let on_event (_config : Config.t) (_context : Context.t) (_event : Exchange_event.t)
+let on_event
+  (_config : Config.t)
+  (_context : Context.t)
+  (_event : Exchange_event.t)
   =
   return ()
 ;;
 
 let on_tick (config : Config.t) (context : Context.t) =
   let rng = Context.random context in
-  (* Fresh id every tick, or duplicate-id detection would reject every submit
-     after the first. *)
-  let client_order_id = Client_order_id.of_int !(config.next_client_order_id) in
+  let client_order_id =
+    Client_order_id.of_int !(config.next_client_order_id)
+  in
   incr config.next_client_order_id;
   let side : Side.t =
     if Splittable_random.int rng ~lo:0 ~hi:1 = 0 then Buy else Sell
@@ -53,5 +53,6 @@ let on_tick (config : Config.t) (context : Context.t) =
   in
   match%map Context.submit context request with
   | Ok () -> ()
-  | Error error -> [%log.error "tick_trader: submit failed" (error : Error.t)]
+  | Error error ->
+    [%log.error "tick_trader: submit failed" (error : Error.t)]
 ;;

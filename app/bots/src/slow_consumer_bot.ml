@@ -6,16 +6,15 @@ module Context = Jsip_bot_runtime.Bot_runtime.Context
 module Config = struct
   type t =
     { read_delay : Time_ns.Span.t
+        (* How long to wait before reading again. *)
     ; events_per_read : int
+        (* How many events to read before reading from pipe again. *)
     ; events_seen : int ref
     }
   [@@deriving sexp_of]
 end
 
 let name = "slow_consumer"
-
-(* The slow consumer never submits orders, so startup and the tick loop do
-   nothing. All of its (mis)behavior is in [on_event]. *)
 let on_start (_config : Config.t) (_context : Context.t) = return ()
 let on_tick (_config : Config.t) (_context : Context.t) = return ()
 
