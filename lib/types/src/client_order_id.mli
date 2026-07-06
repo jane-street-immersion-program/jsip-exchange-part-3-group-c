@@ -22,3 +22,17 @@ include Hashable.S with type t := t
 val of_int : int -> t
 
 val to_int : t -> int
+
+(** Hands out a stream of distinct ids, one per {!generate} call. A bot that
+    fires many orders and never reuses an id holds a single generator and
+    calls {!generate} once per request, so no two of its live orders collide. *)
+module Generator : sig
+  type id := t
+  type t
+
+  (** A fresh generator, ready to hand out ids. *)
+  val create : unit -> t
+
+  (** Return an id distinct from every id this generator has returned before. *)
+  val generate : t -> id
+end
