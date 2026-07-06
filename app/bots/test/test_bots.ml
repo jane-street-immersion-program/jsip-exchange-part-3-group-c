@@ -107,3 +107,50 @@ let%expect_test "make_recording_bot wires up a runnable bot" =
   [%expect {| |}];
   return ()
 ;;
+
+let%expect_test "book filler piles resting, non-marketable Day orders" =
+  let config : Book_filler.Config.t =
+    { symbols = [ aapl ]
+    ; orders_per_tick = 4
+    ; order_size = Size.of_int 10
+    ; price_offset_cents = 50
+    ; next_client_id = 1
+    }
+  in
+  let bot, submitted, _cancelled =
+    make_recording_bot
+      (module Book_filler)
+      config
+      ~initial_price_cents:15000
+      ()
+  in
+  let ctx = Bot_runtime.For_testing.context_of bot in
+  (* Fundamental is 15000; buys must rest at 14950, sells at 15050 — none is
+     marketable. Each tick emits [orders_per_tick] orders, alternating side. *)
+  let%bind () = Book_filler.on_tick config ctx in
+  let%bind () = Book_filler.on_tick config ctx in
+  print_submitted submitted;
+  [%expect
+    {|
+    BUY AAPL 10@$149.50 DAY
+    SELL AAPL 10@$150.50 DAY
+    BUY AAPL 10@$149.50 DAY
+    SELL AAPL 10@$150.50 DAY
+    BUY AAPL 10@$149.50 DAY
+    SELL AAPL 10@$150.50 DAY
+    BUY AAPL 10@$149.50 DAY
+    SELL AAPL 10@$150.50 DAY
+    |}];
+  (* Every order must carry a fresh client_order_id, so none is rejected as a
+     duplicate. Two ticks of 4 orders => 8 orders, 8 distinct ids. *)
+  let ids =
+    List.map !submitted ~f:(fun r ->
+      Client_order_id.to_int r.client_order_id)
+  in
+  printf
+    "orders=%d distinct_ids=%d\n"
+    (List.length ids)
+    (List.length (List.dedup_and_sort ids ~compare:Int.compare));
+  [%expect {| orders=8 distinct_ids=8 |}];
+  return ()
+;;
