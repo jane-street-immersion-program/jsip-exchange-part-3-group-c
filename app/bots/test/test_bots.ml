@@ -204,6 +204,110 @@ let%expect_test "a burst targets every configured symbol with fresh ids" =
     AAPL BUY 10@$149.50 coid=1
     MSFT BUY 10@$149.50 coid=2
     MSFT BUY 10@$149.50 coid=3
+(* ------------------------------------------------------------------------ *)
+(* Tests for [Resource_canary_bot].
+
+   The canary reads nothing from its [Context.t] — it drives latency probes
+   through the [book_query] closure in its config. So we call [on_start] /
+   [on_tick] directly with a throwaway context and a mock [book_query], then
+   inspect the mutable [latency_data] table.
+
+   - [request_interval] (probe every N ticks) is asserted via SAMPLE COUNTS,
+     which are deterministic even though the recorded wall-clock latencies
+     are not.
+   - [report_interval] (print every M ticks) is asserted by PRE-SEEDING
+     [latency_data] with known floats and freezing new probes (huge
+     [request_interval]), so the printed report is fully deterministic. *)
+
+module Rc = Resource_canary_bot
+
+let msft = Symbol.of_string "MSFT"
+
+(* The canary ignores the context, so any runnable bot's context will do. *)
+let make_context () =
+  let bot, _submitted, _cancelled =
+    make_recording_bot (module Inert_bot) () ()
+  in
+  Bot_runtime.For_testing.context_of bot
+;;
+
+(* Build a config, start the bot, optionally seed [latency_data] (after
+   [on_start], which clears it), then drive [ticks] ticks. Returns the config
+   so callers can inspect the resulting state. *)
+let run
+  ~symbols
+  ~request_interval
+  ~report_interval
+  ?(book_query = fun (_ : Symbol.t) -> return None)
+  ?(seed = [])
+  ~ticks
+  ()
+  : Rc.RCConfig.t Deferred.t
+  =
+  let ctx = make_context () in
+  let config : Rc.RCConfig.t =
+    { participant = alice
+    ; request_interval
+    ; report_interval
+    ; symbols
+    ; book_query
+    ; latency_data = Symbol.Table.create ()
+    ; ticks_since_start = 0
+    }
+  in
+  let%bind () = Rc.on_start config ctx in
+  List.iter seed ~f:(fun (symbol, data) ->
+    Hashtbl.set config.latency_data ~key:symbol ~data);
+  let%bind () =
+    Deferred.List.iter
+      (List.init ticks ~f:Fn.id)
+      ~how:`Sequential
+      ~f:(fun (_ : int) -> Rc.on_tick config ctx)
+  in
+  return config
+;;
+
+let print_sample_counts (config : Rc.RCConfig.t) : unit =
+  List.iter config.symbols ~f:(fun symbol ->
+    let data_length =
+      Hashtbl.find_exn config.latency_data symbol
+      |> Rc.For_testing.num_samples
+    in
+    print_endline [%string "%{symbol#Symbol}: %{data_length#Int} samples"])
+;;
+
+let%expect_test "requests are recorded every request_interval ticks, per \
+                 symbol"
+  =
+  (* [report_interval] exceeds the tick count so no report fires; the only
+     observable effect is the recorded sample counts. *)
+  let show ~request_interval ~ticks =
+    let%bind config =
+      run
+        ~symbols:[ aapl; msft ]
+        ~request_interval
+        ~report_interval:1_000_000
+        ~ticks
+        ()
+    in
+    printf "request_interval=%d, ticks=%d:\n" request_interval ticks;
+    print_sample_counts config;
+    return ()
+  in
+  let%bind () = show ~request_interval:1 ~ticks:6 in
+  let%bind () = show ~request_interval:2 ~ticks:6 in
+  let%bind () = show ~request_interval:3 ~ticks:7 in
+  [%expect
+    {|
+    request_interval=1, ticks=6:
+    AAPL: 6 samples
+    MSFT: 6 samples
+    request_interval=2, ticks=6:
+    AAPL: 3 samples
+    MSFT: 3 samples
+    request_interval=3, ticks=7:
+    AAPL: 2 samples
+    MSFT: 2 samples
     |}];
   return ()
 ;;
@@ -245,5 +349,35 @@ let%expect_test "burst_size controls how many orders each burst sends" =
   tick 4: 20 orders
   tick 5: 20 orders
   |}];
+let%expect_test "report prints seeded latency stats once per report_interval"
+  =
+  (* Freeze new probes (huge [request_interval]) so the report reflects
+     exactly the seeded data. The window keeps the most recent 3 samples (20,
+     30, 40) while sum/count cover all four (10, 20, 30, 40): most_recent =
+     40, avg = 100/4 = 25, last_3 = (20+30+40)/3 = 30. 7 ticks /
+     report_interval 3 => two reports. *)
+  let seeded =
+    Rc.For_testing.create_data
+      ~recent:[ 20.0; 30.0; 40.0 ]
+      ~sum_latencies:100.0
+      ~num_samples:4
+  in
+  let%bind (_ : Rc.RCConfig.t) =
+    run
+      ~symbols:[ aapl ]
+      ~request_interval:1_000_000
+      ~report_interval:3
+      ~seed:[ aapl, seeded ]
+      ~ticks:7
+      ()
+  in
+  [%expect
+    {|
+    RESOURCE CANARY REPORT
+    (AAPL) most_recent_latency_ms: 40.ms avg_latency_ms: 25.ms last_3_avg_latency_ms: 30.ms
+
+    RESOURCE CANARY REPORT
+    (AAPL) most_recent_latency_ms: 40.ms avg_latency_ms: 25.ms last_3_avg_latency_ms: 30.ms
+    |}];
   return ()
 ;;
