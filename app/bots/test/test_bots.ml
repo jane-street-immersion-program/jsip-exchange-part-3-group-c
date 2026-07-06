@@ -122,14 +122,17 @@ let bbo_event : Exchange_event.t =
 
 (* The slow consumer drains [events_per_read] events immediately, then stalls
    for [read_delay] on the next one -- that stall is what backs up the
-   exchange-side pipe. We assert the cadence without real sleeping: [read_delay]
-   is large, so a stalled handler is simply a not-yet-determined deferred
-   ([Deferred.peek = None]), and we read the [events_seen] counter (a ref we
-   own) to confirm the increment and reset. *)
+   exchange-side pipe. We assert the cadence without real sleeping:
+   [read_delay] is large, so a stalled handler is simply a not-yet-determined
+   deferred ([Deferred.peek = None]), and we read the [events_seen] counter
+   (a ref we own) to confirm the increment and reset. *)
 let%expect_test "slow consumer stalls every [events_per_read] events" =
   let events_seen = ref 0 in
   let config : Slow_consumer_bot.Config.t =
-    { read_delay = Time_ns.Span.of_sec 60.; events_per_read = 3; events_seen }
+    { read_delay = Time_ns.Span.of_sec 60.
+    ; events_per_read = 3
+    ; events_seen
+    }
   in
   let bot, _submitted, _cancelled =
     make_recording_bot (module Slow_consumer_bot) config ()
