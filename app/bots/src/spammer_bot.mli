@@ -24,10 +24,7 @@ module SpammerConfig : sig
            only their size, since each request becomes exactly one order *)
     ; client_order_id_generator : Client_order_id.Generator.t
         (* supplies a fresh client order id for every request the bot sends *)
-    ; mutable ticks_since_start : int
-        (* the number of ticks since the bot has been started *)
-    ; mutable next_burst_time : int
-        (* the tick at which the next burst will occur *)
+    ; mutable ticks_since_prev_burst : int
     }
 end
 

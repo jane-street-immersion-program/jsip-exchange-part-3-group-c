@@ -53,8 +53,7 @@ let spammer_spec ~participant ~(side : Side.t) ~rng_seed : Bot_spec.t =
     ; dist_from_fundamental_cents
     ; order_size
     ; client_order_id_generator = Client_order_id.Generator.create ()
-    ; ticks_since_start = 0
-    ; next_burst_time = 0
+    ; ticks_since_prev_burst = 0
     }
   in
   T

@@ -13,8 +13,7 @@ module SpammerConfig = struct
     ; dist_from_fundamental_cents : int
     ; order_size : int
     ; client_order_id_generator : Client_order_id.Generator.t
-    ; mutable ticks_since_start : int
-    ; mutable next_burst_time : int
+    ; mutable ticks_since_prev_burst : int
     }
 end
 
@@ -81,8 +80,7 @@ module T = struct
     assert (config.burst_size >= 0);
     assert (config.dist_from_fundamental_cents >= 0);
     assert (config.order_size >= 1);
-    config.ticks_since_start <- 0;
-    config.next_burst_time <- config.burst_interval;
+    config.ticks_since_prev_burst <- 0;
     return ()
   ;;
 
@@ -95,12 +93,12 @@ module T = struct
   ;;
 
   let on_tick (config : Config.t) (context : Bot_runtime.Context.t) =
-    config.ticks_since_start <- config.ticks_since_start + 1;
-    if config.ticks_since_start >= config.next_burst_time
+    config.ticks_since_prev_burst <- config.ticks_since_prev_burst + 1;
+    if config.ticks_since_prev_burst >= config.burst_interval
     then (
       let%map () = fire_burst config context in
-      config.next_burst_time
-        <- config.ticks_since_start + config.burst_interval)
+      config.ticks_since_prev_burst
+        <- 0)
     else return ()
   ;;
 end
