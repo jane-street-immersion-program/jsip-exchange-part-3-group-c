@@ -150,7 +150,24 @@ let%expect_test "cancel storm: fresh submit/cancel pairs every tick" =
    sell side is the mirror image: it must price *above* the fundamental so
    its orders rest instead of crossing the spread. *)
 let%expect_test "cancel storm: sell side prices above the fundamental" =
-  (* TODO(human) *)
+  let config = storm_config ~side:Side.Sell ~pairs_per_tick: 4 in 
+  let bot, submitted, cancelled = 
+    make_recording_bot (module Cancel_storm) config ()
+  in 
+  let ctx = Bot_runtime.For_testing.context_of bot in
+  let%bind () = Cancel_storm.on_tick config ctx in
+  print_storm_activity ~submitted ~cancelled;
+  [%expect {|
+    submit 0: SELL AAPL 1@$150.50
+    submit 1: SELL AAPL 1@$150.50
+    submit 2: SELL AAPL 1@$150.50
+    submit 3: SELL AAPL 1@$150.50
+    cancel 0
+    cancel 1
+    cancel 2
+    cancel 3
+    |}];
+
   return ()
 ;;
 
