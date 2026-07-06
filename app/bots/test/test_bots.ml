@@ -174,7 +174,8 @@ let run
 let print_sample_counts (config : Rc.RCConfig.t) : unit =
   List.iter config.symbols ~f:(fun symbol ->
     let data_length =
-      Hashtbl.find_exn config.latency_data symbol |> List.length
+      Hashtbl.find_exn config.latency_data symbol
+      |> Rc.For_testing.num_samples
     in
     print_endline [%string "%{symbol#Symbol}: %{data_length#Int} samples"])
 ;;
@@ -218,24 +219,32 @@ let%expect_test "requests are recorded every request_interval ticks, per \
 let%expect_test "report prints seeded latency stats once per report_interval"
   =
   (* Freeze new probes (huge [request_interval]) so the report reflects
-     exactly the seeded data. most_recent = 10, avg = (10+20+30+40)/4 = 25,
-     last_3 = (10+20+30)/3 = 20. 7 ticks / report_interval 3 => two reports. *)
+     exactly the seeded data. The window keeps the most recent 3 samples (20,
+     30, 40) while sum/count cover all four (10, 20, 30, 40): most_recent =
+     40, avg = 100/4 = 25, last_3 = (20+30+40)/3 = 30. 7 ticks /
+     report_interval 3 => two reports. *)
+  let seeded =
+    Rc.For_testing.create_data
+      ~recent:[ 20.0; 30.0; 40.0 ]
+      ~sum_latencies:100.0
+      ~num_samples:4
+  in
   let%bind (_ : Rc.RCConfig.t) =
     run
       ~symbols:[ aapl ]
       ~request_interval:1_000_000
       ~report_interval:3
-      ~seed:[ aapl, [ 10.0; 20.0; 30.0; 40.0 ] ]
+      ~seed:[ aapl, seeded ]
       ~ticks:7
       ()
   in
   [%expect
     {|
     RESOURCE CANARY REPORT
-    (AAPL) most_recent_latency_ms: 10.ms avg_latency_ms: 25.ms last_3_avg_latency_ms: 20.ms
+    (AAPL) most_recent_latency_ms: 40.ms avg_latency_ms: 25.ms last_3_avg_latency_ms: 30.ms
 
     RESOURCE CANARY REPORT
-    (AAPL) most_recent_latency_ms: 10.ms avg_latency_ms: 25.ms last_3_avg_latency_ms: 20.ms
+    (AAPL) most_recent_latency_ms: 40.ms avg_latency_ms: 25.ms last_3_avg_latency_ms: 30.ms
     |}];
   return ()
 ;;

@@ -12,6 +12,14 @@ open Jsip_types
     requests. On every multiple of report interval, it prints collected
     statistics to the terminal **)
 
+module Per_symbol_data : sig
+  (** Per-symbol latency bookkeeping: a bounded window of the most recent
+      latencies plus a running sum and sample count for the overall average.
+      The representation is abstract so its invariants stay internal to the
+      bot. *)
+  type t
+end
+
 module RCConfig : sig
   type t =
     { participant : Participant.t (* participant name *)
@@ -21,10 +29,23 @@ module RCConfig : sig
     ; book_query :
         Symbol.t
         -> Book.t option Deferred.t (* function to call the book_query_rpc *)
-    ; latency_data : float list Symbol.Table.t
-        (* a list of latencies for requests per symbol measured in ms *)
+    ; latency_data : Per_symbol_data.t Symbol.Table.t
+        (* per-symbol latency bookkeeping, keyed by symbol *)
     ; mutable ticks_since_start : int (* ticks since the bot was started *)
     }
 end
 
 include Bot_runtime.Bot with type Config.t = RCConfig.t
+
+module For_testing : sig
+  (** Build a [Per_symbol_data.t] directly from its components. [recent] is
+      the bounded window of recent latencies (oldest first); [sum_latencies]
+      and [num_samples] cover every sample ever seen. *)
+  val create_data
+    :  recent:float list
+    -> sum_latencies:float
+    -> num_samples:int
+    -> Per_symbol_data.t
+
+  val num_samples : Per_symbol_data.t -> int
+end

@@ -3,6 +3,14 @@ open! Async
 open Jsip_bot_runtime
 open Jsip_types
 
+module Per_symbol_data = struct
+  type t =
+    { last_3 : float Queue.t
+    ; mutable sum_latencies : float
+    ; mutable num_samples : int
+    }
+end
+
 module RCConfig = struct
   type t =
     { participant : Participant.t
@@ -10,7 +18,7 @@ module RCConfig = struct
     ; report_interval : int
     ; symbols : Symbol.t list
     ; book_query : Symbol.t -> Book.t option Deferred.t
-    ; latency_data : float list Symbol.Table.t
+    ; latency_data : Per_symbol_data.t Symbol.Table.t
     ; mutable ticks_since_start : int
     }
 end
@@ -39,13 +47,6 @@ module Latency_report = struct
     ; last_3_avg_latency_ms : float option
     }
 
-  let empty =
-    { most_recent_latency_ms = None
-    ; avg_latency_ms = None
-    ; last_3_avg_latency_ms = None
-    }
-  ;;
-
   let format_time_ms = function
     | None -> "N/A"
     | Some ts -> Float.to_string ts ^ "ms"
@@ -67,36 +68,41 @@ module T = struct
 
   let name = "ResourceCanary"
 
-  let get_last_3_avg = function
-    | first :: second :: third :: _ ->
-      Some ((first +. second +. third) /. 3.0)
-    | _ -> None
+  (* We only ever keep this many samples in the [last_3] window. *)
+  let num_recent = 3
+
+  let get_last_3_avg (queue : float Queue.t) =
+    if Queue.length queue = num_recent
+    then
+      Some
+        (Queue.fold queue ~init:0.0 ~f:(fun sum num -> sum +. num)
+         /. Int.to_float num_recent)
+    else None
   ;;
 
-  let perform_analysis symbol_latency_data =
-    let data_length = List.length symbol_latency_data |> Float.of_int in
-    let last_3_avg_latency_ms = get_last_3_avg symbol_latency_data in
-    let most_recent_latency_ms =
-      match symbol_latency_data with first :: _ -> Some first | _ -> None
+  let get_latest (queue : float Queue.t) = Queue.last queue
+
+  let perform_analysis (symbol_latency_data : Per_symbol_data.t) =
+    let last_3_avg_latency_ms = get_last_3_avg symbol_latency_data.last_3 in
+    let most_recent_latency_ms = get_latest symbol_latency_data.last_3 in
+    let avg_latency_ms =
+      match symbol_latency_data.num_samples with
+      | 0 -> None
+      | num_samples ->
+        Some (symbol_latency_data.sum_latencies /. Int.to_float num_samples)
     in
-    let report =
-      { Latency_report.empty with
-        last_3_avg_latency_ms
-      ; most_recent_latency_ms
-      }
-    in
-    let sum_of_latencies =
-      match symbol_latency_data with
-      | [] -> None
-      | _ ->
-        Some
-          (List.fold symbol_latency_data ~init:0.0 ~f:(fun sum latency_ms ->
-             sum +. latency_ms))
-    in
-    { report with
-      avg_latency_ms =
-        Option.map sum_of_latencies ~f:(fun sum -> sum /. data_length)
+    { Latency_report.last_3_avg_latency_ms
+    ; most_recent_latency_ms
+    ; avg_latency_ms
     }
+  ;;
+
+  (* Records [latency] into the bounded [queue] of the most recent
+     [num_recent] samples. *)
+  let record_recent_latency (queue : float Queue.t) (latency : float) : unit =
+    if Queue.length queue >= num_recent
+    then ignore (Queue.dequeue queue : float option);
+    Queue.enqueue queue latency
   ;;
 
   let on_start (config : Config.t) (_context : Bot_runtime.Context.t) =
@@ -106,7 +112,14 @@ module T = struct
     then raise_s [%message "report_interval must be positive"];
     config.ticks_since_start <- 0;
     List.iter config.symbols ~f:(fun symbol ->
-      Hashtbl.set config.latency_data ~key:symbol ~data:[]);
+      Hashtbl.set
+        config.latency_data
+        ~key:symbol
+        ~data:
+          { Per_symbol_data.last_3 = Queue.create ()
+          ; sum_latencies = 0.0
+          ; num_samples = 0
+          });
     return ()
   ;;
 
@@ -124,20 +137,20 @@ module T = struct
       if config.ticks_since_start mod config.request_interval = 0
       then
         Deferred.List.iter config.symbols ~how:`Sequential ~f:(fun symbol ->
-          let old_latency_data =
+          let (latency_data : Per_symbol_data.t) =
             Hashtbl.find_exn config.latency_data symbol
           in
           let timer = Timer.start_timer () in
-          let%bind _ = config.book_query symbol in
+          let%bind (_ : Book.t option) = config.book_query symbol in
           Timer.stop_timer timer;
           let time_elapsed =
             Timer.get_time_elapsed timer |> Or_error.ok_exn
           in
-          return
-            (Hashtbl.set
-               config.latency_data
-               ~key:symbol
-               ~data:(time_elapsed :: old_latency_data)))
+          record_recent_latency latency_data.last_3 time_elapsed;
+          latency_data.sum_latencies
+          <- latency_data.sum_latencies +. time_elapsed;
+          latency_data.num_samples <- latency_data.num_samples + 1;
+          return ())
       else return ()
     in
     if config.ticks_since_start mod config.report_interval = 0
@@ -159,3 +172,11 @@ module T = struct
 end
 
 include T
+
+module For_testing = struct
+  let create_data ~recent ~sum_latencies ~num_samples : Per_symbol_data.t =
+    { last_3 = Queue.of_list recent; sum_latencies; num_samples }
+  ;;
+
+  let num_samples (data : Per_symbol_data.t) = data.num_samples
+end
