@@ -147,17 +147,9 @@ let spammer_config
 (* Run a spammer through [on_start] then [num_ticks] hand-driven ticks,
    invoking [on_each_tick] after every tick with the number of orders that
    tick produced. Returns the full record of submitted requests. *)
-let run_spammer
-  (config : Spammer_bot.Config.t)
-  ~num_ticks
-  ~on_each_tick
-  =
+let run_spammer (config : Spammer_bot.Config.t) ~num_ticks ~on_each_tick =
   let bot, submitted, _cancelled =
-    make_recording_bot
-      (module Spammer_bot)
-      config
-      ~symbols:config.symbols
-      ()
+    make_recording_bot (module Spammer_bot) config ~symbols:config.symbols ()
   in
   let ctx = Bot_runtime.For_testing.context_of bot in
   let%bind () = Spammer_bot.on_start config ctx in
@@ -194,16 +186,14 @@ let print_orders_with_ids (submitted : Order.Request.t list ref) =
 
 let%expect_test "a burst targets every configured symbol with fresh ids" =
   let config =
-    spammer_config
-      ~symbols:[ aapl; msft ]
-      ~burst_interval:1
-      ~burst_size:2
-      ()
+    spammer_config ~symbols:[ aapl; msft ] ~burst_interval:1 ~burst_size:2 ()
   in
   (* One tick with burst_interval = 1 fires exactly one burst. *)
   let%bind submitted =
-    run_spammer config ~num_ticks:1 ~on_each_tick:(fun ~tick:_ ~sent_this_tick:_ ->
-      ())
+    run_spammer
+      config
+      ~num_ticks:1
+      ~on_each_tick:(fun ~tick:_ ~sent_this_tick:_ -> ())
   in
   print_orders_with_ids submitted;
   (* 2 symbols x burst_size 2 = 4 orders; Buy rests 50c below the 15000
@@ -219,8 +209,8 @@ let%expect_test "a burst targets every configured symbol with fresh ids" =
 ;;
 
 let%expect_test "bursts fire every burst_interval ticks" =
-  (* burst_interval = 3, one symbol, burst_size = 2: expect bursts on ticks
-     3 and 6, nothing in between. *)
+  (* burst_interval = 3, one symbol, burst_size = 2: expect bursts on ticks 3
+     and 6, nothing in between. *)
   let config =
     spammer_config ~symbols:[ aapl ] ~burst_interval:3 ~burst_size:2 ()
   in
@@ -241,13 +231,14 @@ let%expect_test "bursts fire every burst_interval ticks" =
 ;;
 
 let%expect_test "burst_size controls how many orders each burst sends" =
-  let config = 
+  let config =
     spammer_config ~symbols:[ aapl ] ~burst_interval:1 ~burst_size:20 ()
   in
-  let%bind _ = 
+  let%bind _ =
     run_spammer config ~num_ticks:5 ~on_each_tick:print_per_tick
-in
-[%expect {|
+  in
+  [%expect
+    {|
   tick 1: 20 orders
   tick 2: 20 orders
   tick 3: 20 orders

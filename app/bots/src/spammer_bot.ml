@@ -24,19 +24,26 @@ module T = struct
 
   let name = "Spammer"
 
-  (* The resting price for one spam order. A passive order must sit on the far
-     side of the fundamental so it does not cross the book and trade
+  (* The resting price for one spam order. A passive order must sit on the
+     far side of the fundamental so it does not cross the book and trade
      immediately: a resting Buy sits [dist_cents] BELOW the fundamental, a
      resting Sell sits [dist_cents] ABOVE it. The larger [dist_cents], the
      deeper in the book the order rests and the longer it lingers. *)
-  let passive_price ~(fundamental : Price.t) ~(side : Side.t) ~(dist_cents : int)
+  let passive_price
+    ~(fundamental : Price.t)
+    ~(side : Side.t)
+    ~(dist_cents : int)
     : Price.t
     =
     let dist_price = Price.of_int_cents dist_cents in
-    match side with Buy -> Price.(-) fundamental dist_price | Sell -> Price.(+) fundamental dist_price
+    match side with
+    | Buy -> Price.( - ) fundamental dist_price
+    | Sell -> Price.( + ) fundamental dist_price
+  ;;
 
-  (* Build and send one order for [symbol] on the configured side, resting the
-     configured distance from the fundamental, with a fresh client order id. *)
+  (* Build and send one order for [symbol] on the configured side, resting
+     the configured distance from the fundamental, with a fresh client order
+     id. *)
   let send_one_order
     (config : Config.t)
     (context : Bot_runtime.Context.t)
@@ -57,8 +64,9 @@ module T = struct
           Client_order_id.Generator.generate config.client_order_id_generator
       }
     in
-    (* The bot is adversarial: it does not care whether any individual request
-       is accepted or rejected, so the submit result is intentionally dropped. *)
+    (* The bot is adversarial: it does not care whether any individual
+       request is accepted or rejected, so the submit result is intentionally
+       dropped. *)
     let%map (_ : unit Or_error.t) =
       Bot_runtime.Context.submit context request
     in
@@ -97,8 +105,7 @@ module T = struct
     if config.ticks_since_prev_burst >= config.burst_interval
     then (
       let%map () = fire_burst config context in
-      config.ticks_since_prev_burst
-        <- 0)
+      config.ticks_since_prev_burst <- 0)
     else return ()
   ;;
 end

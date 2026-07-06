@@ -20,8 +20,9 @@ module SpammerConfig : sig
         (* distance from the fundamental value in cents; a Buy rests this far
            below the fundamental, a Sell this far above *)
     ; order_size : int
-        (* shares per order; does not change how many orders rest on the book,
-           only their size, since each request becomes exactly one order *)
+        (* shares per order; does not change how many orders rest on the
+           book, only their size, since each request becomes exactly one
+           order *)
     ; client_order_id_generator : Client_order_id.Generator.t
         (* supplies a fresh client order id for every request the bot sends *)
     ; mutable ticks_since_prev_burst : int

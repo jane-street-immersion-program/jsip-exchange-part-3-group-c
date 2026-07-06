@@ -28,7 +28,6 @@ val to_int : t -> int
     calls {!generate} once per request, so no two of its live orders collide. *)
 module Generator : sig
   type id := t
-
   type t
 
   (** A fresh generator, ready to hand out ids. *)

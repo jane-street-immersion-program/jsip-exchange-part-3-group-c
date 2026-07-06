@@ -7,13 +7,12 @@ module Fundamental_oracle = Jsip_fundamental.Fundamental_oracle
 let name = "order-spam"
 
 let description =
-  "Adversarial: two spammers pound one book -- one resting buys, one resting \
-   sells -- flooding the request queue without ever crossing."
+  "Adversarial: two spammers pound one book -- one resting buys, one \
+   resting sells -- flooding the request queue without ever crossing."
 ;;
 
 (* The single book both spammers target. *)
 let symbol = Symbol.of_string "AAPL"
-
 let buy_spammer = Participant.of_string "SpammerBuy"
 let sell_spammer = Participant.of_string "SpammerSell"
 
@@ -38,11 +37,11 @@ let oracle_config : Fundamental_oracle.Config.t =
     ]
 ;;
 
-(* Wrap a spammer module + config into the existential [Bot_spec.t] the runner
-   consumes. Each spammer gets its own client-order-id generator (so their ids
-   never collide) and its own rng seed (for reproducibility). A spammer reads
-   only the oracle's fundamental on each tick and never reacts to market data,
-   so [is_marketdata_consumer] is [false]. *)
+(* Wrap a spammer module + config into the existential [Bot_spec.t] the
+   runner consumes. Each spammer gets its own client-order-id generator (so
+   their ids never collide) and its own rng seed (for reproducibility). A
+   spammer reads only the oracle's fundamental on each tick and never reacts
+   to market data, so [is_marketdata_consumer] is [false]. *)
 let spammer_spec ~participant ~(side : Side.t) ~rng_seed : Bot_spec.t =
   let config : Spammer_bot.Config.t =
     { participant
