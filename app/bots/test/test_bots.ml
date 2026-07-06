@@ -171,7 +171,6 @@ let run
   return config
 ;;
 
-
 let print_sample_counts (config : Rc.RCConfig.t) : unit =
   List.iter config.symbols ~f:(fun symbol ->
     let data_length =
@@ -201,7 +200,8 @@ let%expect_test "requests are recorded every request_interval ticks, per \
   let%bind () = show ~request_interval:1 ~ticks:6 in
   let%bind () = show ~request_interval:2 ~ticks:6 in
   let%bind () = show ~request_interval:3 ~ticks:7 in
-  [%expect {|
+  [%expect
+    {|
     request_interval=1, ticks=6:
     AAPL: 6 samples
     MSFT: 6 samples
