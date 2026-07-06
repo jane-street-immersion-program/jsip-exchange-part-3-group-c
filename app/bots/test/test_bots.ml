@@ -203,7 +203,10 @@ let%expect_test "a burst targets every configured symbol with fresh ids" =
     AAPL BUY 10@$149.50 coid=0
     AAPL BUY 10@$149.50 coid=1
     MSFT BUY 10@$149.50 coid=2
-    MSFT BUY 10@$149.50 coid=3
+    MSFT BUY 10@$149.50 coid=3|}];
+  return ()
+;;
+
 (* Unlike [print_submitted], this includes each request's client order id:
    the storm pairs submits with cancels by id, so the ids are the pattern
    under test. Prints cumulatively — the recording refs are never cleared —
@@ -439,6 +442,9 @@ let%expect_test "burst_size controls how many orders each burst sends" =
   tick 4: 20 orders
   tick 5: 20 orders
   |}];
+  return ()
+;;
+
 let%expect_test "report prints seeded latency stats once per report_interval"
   =
   (* Freeze new probes (huge [request_interval]) so the report reflects
