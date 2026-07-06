@@ -17,14 +17,10 @@ end
 let name = "book-filler"
 let on_start _config _context = return ()
 
-(* Build the resting order for slot [index] of this tick. We round-robin over
-   [symbols] and flip sides every full pass, so each symbol ends up with
-   roughly equal depth piled on both sides. Pricing every order
-   [price_offset_cents] away from the fundamental on its own passive side
-   keeps it non-marketable, so it rests on the book instead of trading —
-   which is the whole point of the bot. Bumping [next_client_id] on every
-   order gives each one a fresh [client_order_id], so none is ever treated as
-   a duplicate or accidentally cancelled. *)
+(* Build the resting order for the specific index of a tick. We keep cycling
+   through every symbol and fliping sides, so each symbol ends up with
+   roughly equal depth piled on both sides. Price order from fundamental so
+   it keeps resting. *)
 let request_for
   (config : Config.t)
   (context : Bot_runtime.Context.t)
