@@ -1,9 +1,10 @@
-(** A pathological bot: submits an order, immediately cancels it, and
-    repeats forever.
+(** A pathological bot: submits an order, immediately cancels it, and repeats
+    forever.
 
     This bot is deliberately adversarial. It targets three things at once:
 
-    - The cancel path itself ([cancel_order_rpc] / {!Matching_engine.cancel}).
+    - The cancel path itself ([cancel_order_rpc] /
+      {!Matching_engine.cancel}).
     - The submit/accept/cancel event flow on the bot's own session-feed pipe
       — every pair produces (at least) an [Order_accept] and an
       [Order_cancel], back to back.
@@ -40,14 +41,15 @@ module Config : sig
     { symbol : Symbol.t
     ; size : Size.t
     ; side : Side.t
-    (** Side to submit on. Launch two instances (one [Buy], one [Sell]) for
-        a storm that hits both sides of the book. *)
+    (** Side to submit on. Launch two instances (one [Buy], one [Sell]) for a
+        storm that hits both sides of the book. *)
     ; offset_from_fundamental_cents : int
     (** Distance from the fundamental price, on the passive side, so orders
         rest instead of crossing the spread and filling before they can be
         cancelled. A [Buy] prices at [fundamental - offset]; a [Sell] prices
         at [fundamental + offset]. *)
-    ; pairs_per_tick : int (** How many submit/cancel pairs to fire per tick. *)
+    ; pairs_per_tick : int
+    (** How many submit/cancel pairs to fire per tick. *)
     ; next_id : int ref
     (** Monotonically increasing counter for this instance's client order
         ids. Never reused — see the module doc for why that matters. Each
@@ -69,4 +71,8 @@ val on_tick : Config.t -> Bot_runtime.Context.t -> unit Deferred.t
 (** Purely observational: cancels are fired blind (see module doc), so this
     bot has no bookkeeping to do in response to events. Logs rejections so
     the storm's effect on the exchange is visible while a scenario runs. *)
-val on_event : Config.t -> Bot_runtime.Context.t -> Exchange_event.t -> unit Deferred.t
+val on_event
+  :  Config.t
+  -> Bot_runtime.Context.t
+  -> Exchange_event.t
+  -> unit Deferred.t

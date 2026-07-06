@@ -123,7 +123,8 @@ let%expect_test "cancel storm: fresh submit/cancel pairs every tick" =
      $150.00, and every submitted id is cancelled. *)
   let%bind () = Cancel_storm.on_tick config ctx in
   print_storm_activity ~submitted ~cancelled;
-  [%expect {|
+  [%expect
+    {|
     submit 0: BUY AAPL 1@$149.50
     submit 1: BUY AAPL 1@$149.50
     cancel 0
@@ -133,7 +134,8 @@ let%expect_test "cancel storm: fresh submit/cancel pairs every tick" =
      or 1. The output below is cumulative across both ticks. *)
   let%bind () = Cancel_storm.on_tick config ctx in
   print_storm_activity ~submitted ~cancelled;
-  [%expect {|
+  [%expect
+    {|
     submit 0: BUY AAPL 1@$149.50
     submit 1: BUY AAPL 1@$149.50
     submit 2: BUY AAPL 1@$149.50
@@ -150,14 +152,15 @@ let%expect_test "cancel storm: fresh submit/cancel pairs every tick" =
    sell side is the mirror image: it must price *above* the fundamental so
    its orders rest instead of crossing the spread. *)
 let%expect_test "cancel storm: sell side prices above the fundamental" =
-  let config = storm_config ~side:Side.Sell ~pairs_per_tick: 4 in 
-  let bot, submitted, cancelled = 
+  let config = storm_config ~side:Side.Sell ~pairs_per_tick:4 in
+  let bot, submitted, cancelled =
     make_recording_bot (module Cancel_storm) config ()
-  in 
+  in
   let ctx = Bot_runtime.For_testing.context_of bot in
   let%bind () = Cancel_storm.on_tick config ctx in
   print_storm_activity ~submitted ~cancelled;
-  [%expect {|
+  [%expect
+    {|
     submit 0: SELL AAPL 1@$150.50
     submit 1: SELL AAPL 1@$150.50
     submit 2: SELL AAPL 1@$150.50
@@ -167,7 +170,6 @@ let%expect_test "cancel storm: sell side prices above the fundamental" =
     cancel 2
     cancel 3
     |}];
-
   return ()
 ;;
 
