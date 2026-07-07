@@ -80,7 +80,7 @@ let num_slow_consumers = 5
 let read_delay = Time_ns.Span.of_sec 30.0
 let events_per_read = 1
 
-(* Reads 1 event / second *)
+(* Reads 1 event per 30 seconds *)
 let slow_consumer_spec index =
   let config : Jsip_bots.Slow_consumer_bot.Config.t =
     { read_delay; events_per_read; events_seen = ref 0 }
