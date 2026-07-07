@@ -168,6 +168,10 @@ let%expect_test "slow consumer stalls every [events_per_read] events" =
     event 4: events_seen=1 stalled=false
     event 5: events_seen=2 stalled=false
     event 6: events_seen=0 stalled=true
+    |}];
+  return ()
+;;
+
 let%expect_test "book filler piles resting, non-marketable Day orders" =
   let config : Book_filler.Config.t =
     { symbols = [ aapl ]
