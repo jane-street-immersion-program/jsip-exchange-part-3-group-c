@@ -161,6 +161,9 @@ let%expect_test "book filler piles resting, non-marketable Day orders" =
     (List.length ids)
     (List.length (List.dedup_and_sort ids ~compare:Int.compare));
   [%expect {| orders=8 distinct_ids=8 |}];
+  return ()
+;;
+
 (* --- Spammer bot -------------------------------------------------------- *)
 
 (* Build a spammer config with sensible defaults so each test overrides only
